@@ -8,7 +8,41 @@ import { icons } from "@/components/SVG";
 
 export default function LoginScreen() {
     const [showPassword, setShowPassword] = useState(false);
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
     const navigate = useNavigate();
+    const [isLoading, setIsLoading] = useState(false);
+        const [error, setError] = useState("");
+
+    const handleLogin = async () => {
+
+        setIsLoading(true);
+        setError("");
+
+        try {
+            const response = await fetch("http://localhost:3001/api/auth/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email, password }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                localStorage.setItem("user", JSON.stringify(data.user));
+                localStorage.setItem("token", data.token);
+                navigate("/home");
+            } else {
+                setError(data.error || "Erro ao tentar Logar no sistema.");
+            }
+        } catch (err) {
+            setError("Erro de conexão com o servidor.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     return (
         <div className="flex h-screen w-full bg-[#131313] items-center justify-center flex-col">
@@ -24,7 +58,12 @@ export default function LoginScreen() {
                         className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9aa0a6]"
                         dangerouslySetInnerHTML={{ __html: icons.email }}
                     />
-                    <Input placeholder="Email" type="email" className="w-full pl-12 border-[#2f3134] border bg-[#2a2a2a] text-white" />
+                    <Input 
+                    placeholder="Email" 
+                    type="email" 
+                    value={email} 
+                    className="w-full pl-12 border-[#2f3134] border bg-[#2a2a2a] text-white" 
+                    onChange={(e)=>setEmail(e.target.value)}/>
                 </div>
                 <div className="flex items-center justify-between mb-2">
                     <Label className="text-white">Senha</Label>
@@ -40,7 +79,9 @@ export default function LoginScreen() {
                         placeholder="Senha"
                         type={showPassword ? "text" : "password"}
                         className="w-full pl-12 border-[#2f3134] border bg-[#2a2a2a] text-white"
+                        onChange={(e)=>setPassword(e.target.value)}
                     />
+
                     <button
                         type="button"
                         onClick={() => setShowPassword((prev) => !prev)}
@@ -48,9 +89,15 @@ export default function LoginScreen() {
                     >
                         {showPassword ? <span dangerouslySetInnerHTML={{ __html: icons.open_eye }} /> : <span dangerouslySetInnerHTML={{ __html: icons.close_eye }} />}
                     </button>
-
                 </div>
-                <Button className="w-full bg-[#5865f2] hover:bg-[#4752c4] text-white cursor-pointer" onClick={() => navigate('/home')}>Entrar</Button>
+                {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+                <Button 
+                    className="w-full bg-[#5865f2] hover:bg-[#4752c4] text-white cursor-pointer disabled:opacity-50" 
+                    onClick={handleLogin}
+                    disabled={isLoading}
+                >
+                    {isLoading ? "Entrando..." : "Entrar"}
+                </Button>
                 <div className="flex mt-8 items-center justify-center flex-row">
                     <div className="border border-[#2f3134] w-[20%]"></div>
                     <p className="text-white mx-2">Ou continue com</p>

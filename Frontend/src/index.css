@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@config "../../tailwind.config.js";
+@config "../tailwind.config.js";
 
 :root {
   /* Definir variáveis de CSS para as cores base para uso fora do Tailwind, se necessário */

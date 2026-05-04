@@ -20,6 +20,7 @@ import { BadgeCheckIcon, CreditCardIcon, BellIcon, LogOutIcon, TableConfigIcon, 
 import { Button } from "./ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 
 
@@ -30,6 +31,25 @@ interface SideBarProps {
 export function SideBar({ onSelectView }: SideBarProps) {
     const navigate = useNavigate();
     const { isMobile } = useSidebar();
+    const [user, setUser] = useState<{name: string, email: string} | null>(null);
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem("user");
+        if (storedUser) {
+            setUser(JSON.parse(storedUser));
+        }
+    }, []);
+
+    const handleLogout = () => {
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+        navigate('/');
+    };
+
+    const getInitials = (name: string) => {
+        if (!name) return "US";
+        return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    };
 
     return (
         <Sidebar collapsible="icon" className="border-r border-neutral-800 bg-neutral-900">
@@ -67,11 +87,11 @@ export function SideBar({ onSelectView }: SideBarProps) {
                                 <SidebarMenuButton size="lg" className="hover:bg-neutral-800 cursor-pointer">
                                     <Avatar className="h-8 w-8 rounded-lg shrink-0">
                                         <AvatarImage src="https://github.com/shadcn.png" alt="shadcn" />
-                                        <AvatarFallback className="rounded-lg">LR</AvatarFallback>
+                                        <AvatarFallback className="rounded-lg">{user ? getInitials(user.name) : "US"}</AvatarFallback>
                                     </Avatar>
                                     <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden ml-2">
-                                        <span className="truncate font-semibold text-neutral-50">Usuário</span>
-                                        <span className="truncate text-xs text-neutral-400">admin@pulse.com</span>
+                                        <span className="truncate font-semibold text-neutral-50">{user?.name || "Usuário"}</span>
+                                        <span className="truncate text-xs text-neutral-400">{user?.email || "usuario@email.com"}</span>
                                     </div>
                                 </SidebarMenuButton>
                             </DropdownMenuTrigger>
@@ -93,7 +113,7 @@ export function SideBar({ onSelectView }: SideBarProps) {
                                     
                                 </DropdownMenuGroup>
                                 <DropdownMenuSeparator className="bg-neutral-800" />
-                                <DropdownMenuItem className="hover:bg-neutral-800 cursor-pointer text-red-500 focus:text-red-500 focus:bg-neutral-800" onClick={() => navigate('/')}>
+                                <DropdownMenuItem className="hover:bg-neutral-800 cursor-pointer text-red-500 focus:text-red-500 focus:bg-neutral-800" onClick={handleLogout}>
                                     <LogOutIcon className="mr-2 h-4 w-4" />
                                     <span>Sair</span>
                                 </DropdownMenuItem>

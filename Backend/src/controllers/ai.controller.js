@@ -13,6 +13,6 @@ export const perguntaAi = async (req, res) => {
         res.json({ resposta });
     } catch (error) {
         console.error('Erro ao gerar resposta:', error);
-        res.status(500).json({ error: 'Erro ao gerar resposta' });
+        res.status(500).json({ error: error.message || 'Erro interno no servidor da IA' });
     }
 };

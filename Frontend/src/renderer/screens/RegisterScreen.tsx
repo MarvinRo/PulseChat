@@ -7,9 +7,49 @@ import { Label } from "@/components/ui/label";
 import { icons } from "@/components/SVG";
 
 export default function LoginScreen() {
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState("");
     const navigate = useNavigate();
+
+    const handleRegister = async () => {
+        if (password !== confirmPassword) {
+            setError("As senhas não coincidem.");
+            return;
+        }
+
+        setIsLoading(true);
+        setError("");
+
+        try {
+            const response = await fetch("http://localhost:3001/api/auth/register", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ name, email, password }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                localStorage.setItem("user", JSON.stringify(data.user));
+                localStorage.setItem("token", data.token);
+                navigate("/home");
+            } else {
+                setError(data.error || "Erro ao tentar cadastrar.");
+            }
+        } catch (err) {
+            setError("Erro de conexão com o servidor.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     return (
         <div className="flex h-screen w-full bg-[#131313] items-center justify-center flex-col">
@@ -25,7 +65,7 @@ export default function LoginScreen() {
                         className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9aa0a6]"
                         dangerouslySetInnerHTML={{ __html: icons.person }}
                     />
-                    <Input placeholder="Nome Completo" type="text" className="w-full pl-12 border-[#2f3134] border bg-[#2a2a2a] text-white" />
+                    <Input placeholder="Nome Completo" type="text" value={name} className="w-full pl-12 border-[#2f3134] border bg-[#2a2a2a] text-white" onChange={(e) => setName(e.target.value)} />
                 </div>
                 <Label className="text-white mb-2">Email</Label>
                 <div className="relative mb-4">
@@ -33,7 +73,7 @@ export default function LoginScreen() {
                         className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9aa0a6]"
                         dangerouslySetInnerHTML={{ __html: icons.email }}
                     />
-                    <Input placeholder="Email" type="email" className="w-full pl-12 border-[#2f3134] border bg-[#2a2a2a] text-white" />
+                    <Input placeholder="Email" type="email" value={email} className="w-full pl-12 border-[#2f3134] border bg-[#2a2a2a] text-white" onChange={(e) => setEmail(e.target.value)} />
                 </div>
                 <div className="flex items-center justify-between mb-2">
                     <Label className="text-white">Senha</Label>
@@ -47,6 +87,8 @@ export default function LoginScreen() {
                     <Input
                         placeholder="Senha"
                         type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
                         className="w-full pl-12 border-[#2f3134] border bg-[#2a2a2a] text-white"
                     />
                     <button
@@ -70,6 +112,8 @@ export default function LoginScreen() {
                     <Input
                         placeholder="Confirmar senha"
                         type={showConfirmPassword ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
                         className="w-full pl-12 border-[#2f3134] border bg-[#2a2a2a] text-white"
                     />
                     <button
@@ -81,7 +125,14 @@ export default function LoginScreen() {
                     </button>
 
                 </div>
-                <Button className="w-full bg-[#5865f2] hover:bg-[#4752c4] text-white cursor-pointer">Cadastrar</Button>
+                {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+                <Button 
+                    className="w-full bg-[#5865f2] hover:bg-[#4752c4] text-white cursor-pointer disabled:opacity-50" 
+                    onClick={handleRegister} 
+                    disabled={isLoading}
+                >
+                    {isLoading ? "Cadastrando..." : "Cadastrar"}
+                </Button>
                 
             </div>
 

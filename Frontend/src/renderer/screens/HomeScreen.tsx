@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { ButtonGroup } from "@/components/ui/button-group";
 
 interface Message {
     role: 'user' | 'assistant';
@@ -40,6 +42,8 @@ export default function HomeScreen() {
 
             if (data.resposta) {
                 setMessages(prev => [...prev, { role: 'assistant', text: data.resposta }]);
+            } else if (data.error) {
+                setMessages(prev => [...prev, { role: 'assistant', text: `⚠️ Erro retornado: ${data.error}` }]);
             } else {
                 setMessages(prev => [...prev, { role: 'assistant', text: 'Desculpe, não consegui obter uma resposta do servidor.' }]);
             }
@@ -60,6 +64,14 @@ export default function HomeScreen() {
                     <div className="flex items-center gap-4">
                         <SidebarTrigger className="text-neutral-400 hover:text-neutral-50 hover:bg-neutral-800" />
                         <h1 className="text-neutral-50 text-xl font-semibold">Pulse Chat</h1>
+                    </div>
+                    <div>
+                        <Field>
+                            <ButtonGroup>
+                                <Input id="input-button-group" className="w-54" placeholder="O que você está procurando?" />
+                                <Button variant="outline">Buscar</Button>
+                            </ButtonGroup>
+                        </Field>
                     </div>
                 </div>
 

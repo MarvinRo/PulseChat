@@ -1,7 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
-import dotenv from "dotenv";
 
-dotenv.config();
+if (!process.env.API_Key) {
+  console.error("ALERTA: A chave API_Key não foi encontrada nas variáveis de ambiente!");
+} else {
+  console.log("Chave da API carregada com sucesso. Inicia com:", process.env.API_Key.substring(0, 8) + "...");
+}
 
 const genAI = new GoogleGenAI({
   apiKey: process.env.API_Key,
@@ -34,7 +37,11 @@ const generateResponse = async (prompt) => {
       }
     });
 
-    return response.text;
+    if (response && response.text) {
+      return response.text;
+    } else {
+      return "A IA não enviou uma resposta de texto. Isso geralmente acontece devido aos filtros de segurança do Google (conteúdo sensível) ou sobrecarga temporária.";
+    }
   } catch (error) {
     console.error("Erro ao gerar resposta:", error);
     throw error;
