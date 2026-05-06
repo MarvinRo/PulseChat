@@ -26,9 +26,11 @@ import { useEffect, useState } from "react";
 
 interface SideBarProps {
     onSelectView?: (view: string) => void;
+    activeChats?: any[];
+    onSelectChat?: (chat: any) => void;
 }
 
-export function SideBar({ onSelectView }: SideBarProps) {
+export function SideBar({ onSelectView, activeChats = [], onSelectChat }: SideBarProps) {
     const navigate = useNavigate();
     const { isMobile } = useSidebar();
     const [user, setUser] = useState<{name: string, email: string} | null>(null);
@@ -53,7 +55,7 @@ export function SideBar({ onSelectView }: SideBarProps) {
 
     return (
         <Sidebar collapsible="icon" className="border-r border-neutral-800 bg-neutral-900">
-            <SidebarHeader className="p-4 group-data-[collapsible=icon]:p-2 border-b border-neutral-800 bg-neutral-900 h-15.25 flex justify-center">
+            <SidebarHeader className="p-4 group-data-[collapsible=icon]:p-2 border-b border-neutral-800 bg-neutral-900 h-15 flex justify-center">
                 <div className="flex justify-center items-center group-data-[collapsible=icon]:justify-center gap-3 p-2 group-data-[collapsible=icon]:p-1 rounded-lg transition-colors">
                     <img src="../../public/assets/logo.png" alt="Logo do Pulse Chat" className="w-8 shrink-0" />
                     <Label className="text-neutral-50 group-data-[collapsible=icon]:hidden font-medium">Pulse Chat</Label>
@@ -73,9 +75,38 @@ export function SideBar({ onSelectView }: SideBarProps) {
                             {icons.aiChat && <span dangerouslySetInnerHTML={{ __html: icons.aiChat }} className="text-neutral-50 shrink-0" />}
                             <Label className="text-neutral-50 group-data-[collapsible=icon]:hidden cursor-pointer">Pulse Ai</Label>
                         </div>
-                        <div className="flex justify-center items-center group-data-[collapsible=icon]:justify-center gap-3 p-2 rounded-lg hover:bg-neutral-800 cursor-pointer transition-colors">
+                        <div 
+                            className="flex justify-center items-center group-data-[collapsible=icon]:justify-center gap-3 p-2 rounded-lg hover:bg-neutral-800 cursor-pointer transition-colors"
+                            onClick={() => onSelectView?.('contacts')}
+                        >
                             {icons.msgPlus && <span dangerouslySetInnerHTML={{ __html: icons.msgPlus }} className="text-neutral-50 shrink-0" />}
+                            <Label className="text-neutral-50 group-data-[collapsible=icon]:hidden cursor-pointer">Novo chat</Label>
                         </div>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+
+                {/* Novo grupo: Histórico de Conversas */}
+                <SidebarGroup>
+                    <SidebarGroupLabel className="text-neutral-50 group-data-[collapsible=icon]:hidden">Conversas Recentes</SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        {activeChats.length === 0 ? (
+                            <p className="text-neutral-500 text-xs px-2 group-data-[collapsible=icon]:hidden">Nenhum chat ativo.</p>
+                        ) : (
+                            activeChats.map((chat: any) => (
+                                <div 
+                                    key={chat.id}
+                                    onClick={() => onSelectChat?.(chat)}
+                                    className="flex items-center group-data-[collapsible=icon]:justify-center gap-3 p-2 rounded-lg hover:bg-neutral-800 cursor-pointer transition-colors mb-1"
+                                >
+                                    <Avatar className="h-6 w-6 shrink-0 rounded-md">
+                                        <AvatarFallback className="bg-primary-500/20 text-primary-500 text-xs rounded-md border border-primary-500/30">
+                                            {chat.name.charAt(0).toUpperCase()}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <Label className="text-neutral-50 group-data-[collapsible=icon]:hidden cursor-pointer truncate flex-1">{chat.name}</Label>
+                                </div>
+                            ))
+                        )}
                     </SidebarGroupContent>
                 </SidebarGroup>
             </SidebarContent>
