@@ -16,7 +16,8 @@ export const getContacts = async (req, res) => {
         if (search) {
             whereCondition.OR = [
                 { name: { startsWith: search } },
-                { email: { startsWith: search } }
+                { email: { startsWith: search } },
+                { nickName: { startsWith: search } }
             ];
         }
 
@@ -25,6 +26,7 @@ export const getContacts = async (req, res) => {
             select: {
                 id: true,
                 name: true,
+                nickName: true,
                 email: true
             }
         });
@@ -51,7 +53,7 @@ export const sendMessage = async (req, res) => {
             where: {
                 AND: [
                     { participants: { some: { id: senderId } } },
-                    { participants: { some: { id: Number(receiverId) } } }
+                    { participants: { some: { id: receiverId } } }
                 ]
             },
             include: {
@@ -66,7 +68,7 @@ export const sendMessage = async (req, res) => {
             chat = await prisma.chat.create({
                 data: {
                     participants: {
-                        connect: [{ id: senderId }, { id: Number(receiverId) }]
+                        connect: [{ id: senderId }, { id: receiverId }]
                     }
                 },
                 include: {
@@ -119,11 +121,16 @@ export const getMessages = async (req, res) => {
             where: {
                 AND: [
                     { participants: { some: { id: userId } } },
-                    { participants: { some: { id: Number(contactId) } } }
+                    { participants: { some: { id: contactId } } }
                 ]
             },
             include: {
-                messages: { orderBy: { createdAt: 'asc' } }
+                messages: { 
+                    where: {
+                        NOT: { deletedBy: { has: userId } }
+                    },
+                    orderBy: { createdAt: 'asc' } 
+                }
             }
         });
 
@@ -142,13 +149,18 @@ export const getActiveChats = async (req, res) => {
         // Busca todos os chats em que o usuário logado é participante
         const activeChats = await prisma.chat.findMany({
             where: {
-                participants: { some: { id: userId } }
+                participants: { some: { id: userId } },
+                messages: {
+                    some: {
+                        NOT: { deletedBy: { has: userId } }
+                    }
+                }
             },
             orderBy: { updatedAt: 'desc' }, // Traz as conversas recentes primeiro
             include: {
                 participants: {
                     where: { id: { not: userId } }, // Pega apenas a OUTRA pessoa
-                    select: { id: true, name: true, email: true }
+                    select: { id: true, name: true, nickName: true, email: true }
                 }
             }
         });
@@ -162,5 +174,69 @@ export const getActiveChats = async (req, res) => {
     } catch (error) {
         console.error('Erro ao buscar conversas ativas:', error);
         res.status(500).json({ error: 'Erro interno ao buscar conversas ativas' });
+    }
+};
+
+// 5. Exclui a conversa e todo o histórico de mensagens
+export const deleteChat = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { contactId } = req.params;
+
+        // Busca o chat que possui os dois participantes
+        const chat = await prisma.chat.findFirst({
+            where: {
+                AND: [
+                    { participants: { some: { id: userId } } },
+                    { participants: { some: { id: contactId } } }
+                ]
+            },
+            include: {
+                messages: true,
+                participants: true
+            }
+        });
+
+        if (!chat) {
+            return res.status(404).json({ error: 'Conversa não encontrada' });
+        }
+
+        // 1. Marca todas as mensagens atuais como deletadas por este usuário
+        const updatePromises = chat.messages.map(async (msg) => {
+            const currentDeletedBy = msg.deletedBy || [];
+            
+            // Se o usuário ainda não deletou essa mensagem
+            if (!currentDeletedBy.includes(userId)) {
+                const newDeletedBy = [...currentDeletedBy, userId];
+                
+                // Se todos os participantes do chat deletaram a mensagem, apagamos ela definitivamente
+                if (newDeletedBy.length >= chat.participants.length) {
+                    return prisma.message.delete({ where: { id: msg.id } });
+                } else {
+                    // Senão, apenas adicionamos o usuário na lista de "quem deletou"
+                    return prisma.message.update({
+                        where: { id: msg.id },
+                        data: { deletedBy: newDeletedBy }
+                    });
+                }
+            }
+        });
+
+        await Promise.all(updatePromises);
+
+        // 2. Verifica se ainda sobrou alguma mensagem no chat
+        const remainingMessages = await prisma.message.count({
+            where: { chatId: chat.id }
+        });
+
+        // 3. Se não houver mais nenhuma mensagem visível no chat (ambos apagaram tudo), apagamos a sala
+        if (remainingMessages === 0) {
+            await prisma.chat.delete({ where: { id: chat.id } });
+        }
+
+        res.status(200).json({ message: 'Conversa excluída com sucesso' });
+    } catch (error) {
+        console.error('Erro ao excluir conversa:', error);
+        res.status(500).json({ error: 'Erro interno ao excluir conversa' });
     }
 };

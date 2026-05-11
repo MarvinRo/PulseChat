@@ -4,11 +4,15 @@ import { useNavigate } from "react-router-dom";
 import { SideBar } from "@/components/SideBar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, MessageSquare } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { io, Socket } from "socket.io-client";
+import { WelcomeView } from "@/components/WelcomeView";
+import { AiChatView } from "@/components/AiChatView";
+import { ContactsView } from "@/components/ContactsView";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { PeerChatView } from "@/components/PeerChatView";
 
 interface Message {
     role: 'user' | 'assistant';
@@ -32,7 +36,13 @@ export default function HomeScreen() {
     const [contactSearchQuery, setContactSearchQuery] = useState("");
     const [activeChats, setActiveChats] = useState<any[]>([]);
     const [socket, setSocket] = useState<Socket | null>(null);
-    const [currentChatId, setCurrentChatId] = useState<number | null>(null);
+    const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+
+    // Estados para o Modal de Conta
+    const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+    const [newNickName, setNewNickName] = useState("");
+    const [profileError, setProfileError] = useState("");
+    const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
     // Refs para controlar o final das listas de mensagens
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -59,8 +69,36 @@ export default function HomeScreen() {
     const currentUserString = localStorage.getItem("user");
     const currentUser = currentUserString ? JSON.parse(currentUserString) : {};
 
+    // Sincroniza o input do modal com o nick atual apenas quando o modal é aberto
+    useEffect(() => {
+        if (isAccountModalOpen) {
+            const storedUser = localStorage.getItem("user");
+            const parsedUser = storedUser ? JSON.parse(storedUser) : {};
+            setNewNickName(parsedUser?.nickName || parsedUser?.name || "");
+            setProfileError("");
+        }
+    }, [isAccountModalOpen]);
+
+    // Retorna para a tela de boas vindas ao pressionar "Esc"
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setCurrentView('welcome');
+                setSelectedContact(null);
+                setCurrentChatId(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     // Função que chama o backend com o termo de pesquisa
     const fetchContacts = async (query = "") => {
+        if (!query.trim()) {
+            setContacts([]);
+            return;
+        }
+
         try {
             const response = await fetch(`http://localhost:3001/api/messages/contacts?search=${encodeURIComponent(query)}`, {
                 headers: { "Authorization": `Bearer ${token}` }
@@ -74,12 +112,13 @@ export default function HomeScreen() {
         }
     };
 
-    // Carrega a lista inicial (sem filtro) quando abre a aba de "Novo chat"
+    // Limpa a busca e os resultados ao entrar na aba de "Novo chat"
     useEffect(() => {
         if (currentView === 'contacts') {
-            fetchContacts("");
+            setContacts([]);
+            setContactSearchQuery("");
         }
-    }, [currentView, token]);
+    }, [currentView]);
 
     // Busca a lista de conversas ativas (histórico do menu lateral)
     const fetchActiveChats = async () => {
@@ -226,7 +265,7 @@ export default function HomeScreen() {
 
     const loadChatHistory = async (contact: any) => {
         setSelectedContact(contact);
-        setPeerMessages([]); // Limpa as mensagens antigas antes de carregar as novas
+        setPeerMessages([]);
         setCurrentChatId(null);
         setCurrentView('peer-chat');
 
@@ -244,12 +283,82 @@ export default function HomeScreen() {
         }
     };
 
+    // Função para deletar o chat no backend e visualmente
+    const handleDeleteChat = async (contactId: string) => {
+        try {
+            const response = await fetch(`http://localhost:3001/api/messages/${contactId}`, {
+                method: "DELETE",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                console.error("Erro ao deletar conversa no servidor:", response.status, errData);
+                return;
+            }
+            
+            setActiveChats(prev => prev.filter(chat => chat.id !== contactId));
+            
+            // Se o usuário estiver com esse chat aberto, volta para a tela de boas vindas
+            if (selectedContact?.id === contactId) {
+                setCurrentView('welcome');
+                setSelectedContact(null);
+                setCurrentChatId(null);
+            }
+            
+            console.log("Conversa excluída com sucesso!");
+        } catch (error) {
+            console.error("Erro ao deletar conversa:", error);
+        }
+    };
+
+    const handleUpdateProfile = async () => {
+        if (!newNickName.trim()) {
+            setProfileError("O Nickname não pode ser vazio.");
+            return;
+        }
+        setIsUpdatingProfile(true);
+        setProfileError("");
+
+        try {
+            const response = await fetch(`http://localhost:3001/api/messages/profile`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ nickName: newNickName })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                // Atualiza o usuário no localStorage
+                const updatedUser = { ...currentUser, nickName: data.user.nickName };
+                localStorage.setItem("user", JSON.stringify(updatedUser));
+                
+                // Fecha o modal e recarrega a página para refletir a mudança em toda a UI
+                setIsAccountModalOpen(false);
+                window.location.reload();
+            } else {
+                setProfileError(data.error || "Erro ao atualizar perfil.");
+            }
+        } catch (error) {
+            console.error("Erro ao atualizar perfil:", error);
+            setProfileError("Erro de conexão com o servidor.");
+        } finally {
+            setIsUpdatingProfile(false);
+        }
+    };
+
     return (
         <SidebarProvider defaultOpen={false} className="bg-neutral-950 h-screen w-full overflow-hidden">
             <SideBar 
                 onSelectView={setCurrentView} 
                 activeChats={activeChats} 
                 onSelectChat={loadChatHistory} 
+                onDeleteChat={handleDeleteChat}
+                onOpenAccountModal={() => setIsAccountModalOpen(true)}
             />
             <div className="flex flex-1 flex-col h-full bg-neutral-950 overflow-hidden">
                 {/* Barra superior */}
@@ -268,146 +377,82 @@ export default function HomeScreen() {
                     </div>
                 </div>
 
-                {currentView === 'welcome' && (
-                    <div className="flex-1 flex flex-col items-center justify-center text-neutral-50 p-4">
-                        <img src="../../public/assets/logo.png" alt="Logo do Pulse Chat" className="w-24 mb-6 opacity-80" />
-                        <h2 className="text-3xl font-semibold mb-2">Bem-vindo ao Pulse Chat</h2>
-                        <p className="text-neutral-400 text-center max-w-md">
-                            Selecione o Pulse Ai no menu lateral para iniciar uma nova conversa e explorar as funcionalidades do nosso assistente inteligente.
-                        </p>
-                    </div>
-                )}
+                {/* Modal de Conta */}
+                <AlertDialog open={isAccountModalOpen} onOpenChange={setIsAccountModalOpen}>
+                    <AlertDialogContent className="bg-neutral-900 border border-neutral-800 text-neutral-50">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Configurações da Conta</AlertDialogTitle>
+                            <AlertDialogDescription className="text-neutral-400">
+                                Gerencie suas informações de perfil.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        
+                        <div className="space-y-4 py-4">
+                            <Field>
+                                <FieldLabel>Nickname</FieldLabel>
+                                <Input value={newNickName} onChange={(e) => setNewNickName(e.target.value)} placeholder="Seu novo nick" className="border-[#2f3134] border bg-[#2a2a2a] text-white" />
+                            </Field>
+                            <Field>
+                                <FieldLabel>Nova Senha</FieldLabel>
+                                <Input type="password" placeholder="••••••••" disabled className="border-[#2f3134] border bg-[#2a2a2a] text-white disabled:opacity-50" />
+                            </Field>
+                            <Field>
+                                <FieldLabel>Email</FieldLabel>
+                                <Input type="email" value={currentUser?.email || ""} disabled className="border-[#2f3134] border bg-[#2a2a2a] text-white disabled:opacity-50" />
+                            </Field>
+                            {profileError && <p className="text-red-500 text-sm text-center">{profileError}</p>}
+                        </div>
+
+                        <AlertDialogFooter>
+                            <AlertDialogCancel className="bg-neutral-800 hover:bg-neutral-700 text-neutral-50 border-0 cursor-pointer">Cancelar</AlertDialogCancel>
+                            <AlertDialogAction 
+                                onClick={(e) => {
+                                    e.preventDefault(); // Evita que o modal feche antes de terminar a requisição
+                                    handleUpdateProfile();
+                                }} 
+                                disabled={isUpdatingProfile} 
+                                className="bg-[#5865f2] hover:bg-[#4752c4] text-white border-0 cursor-pointer disabled:opacity-50"
+                            >
+                                {isUpdatingProfile ? "Salvando..." : "Salvar"}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* Views Renderizadas Dinamicamente */}
+                {currentView === 'welcome' && <WelcomeView />}
 
                 {currentView === 'chat' && (
-                    <>
-                        {/* Área de mensagens (Chat) */}
-                        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-                            {messages.map((msg, index) => (
-                                <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[75%] p-4 rounded-xl ${msg.role === 'user' ? 'bg-primary-500 text-neutral-50 rounded-br-none' : 'bg-neutral-800 text-neutral-200 border border-neutral-800 rounded-bl-none whitespace-pre-wrap'}`}>
-                                        {msg.text}
-                                    </div>
-                                </div>
-                            ))}
-                            {isLoading && (
-                                <div className="flex justify-start">
-                                    <div className="max-w-[75%] p-4 rounded-xl bg-neutral-800 text-neutral-400 border border-neutral-700 rounded-bl-none animate-pulse">
-                                        O assistente está digitando...
-                                    </div>
-                                </div>
-                            )}
-                            {/* Âncora invisível para a rolagem automática */}
-                            <div ref={messagesEndRef} />
-                        </div>
-
-                        {/* Área de input do usuário */}
-                        <div className="p-4 bg-neutral-900 border-t border-neutral-800">
-                            <div className="max-w-4xl mx-auto relative flex items-center">
-                                <Input
-                                    value={prompt}
-                                    onChange={(e) => setPrompt(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                                    disabled={isLoading}
-                                    placeholder="Digite sua mensagem para o assistente..."
-                                    className="w-full pr-12 py-6 border-neutral-700 bg-neutral-800 text-neutral-50 rounded-xl focus-visible:ring-1 focus-visible:ring-primary-500"
-                                />
-                                <Button
-                                    onClick={handleSend}
-                                    disabled={isLoading}
-                                    size="icon"
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 bg-primary-500 hover:bg-primary-600 text-neutral-50 rounded-lg cursor-pointer disabled:opacity-50"
-                                >
-                                    <Send className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        </div>
-                    </>
+                    <AiChatView 
+                        messages={messages} 
+                        isLoading={isLoading} 
+                        prompt={prompt} 
+                        setPrompt={setPrompt} 
+                        handleSend={handleSend} 
+                        messagesEndRef={messagesEndRef} 
+                    />
                 )}
 
-                {/* View de Contatos Cadastrados */}
                 {currentView === 'contacts' && (
-                    <div className="flex-1 overflow-y-auto p-8 flex flex-col gap-4">
-                        <h2 className="text-2xl font-semibold text-neutral-50 mb-6">Contatos Cadastrados</h2>
-                        
-                        <div className="w-full max-w-2xl mb-4 flex gap-2">
-                            <Input
-                                placeholder="Pesquisar por nome ou e-mail..."
-                                value={contactSearchQuery}
-                                onChange={(e) => setContactSearchQuery(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && fetchContacts(contactSearchQuery)}
-                                className="flex-1 border-neutral-700 bg-neutral-800 text-neutral-50 rounded-xl focus-visible:ring-1 focus-visible:ring-primary-500"
-                            />
-                            <Button 
-                                onClick={() => fetchContacts(contactSearchQuery)}
-                                className="bg-primary-500 hover:bg-primary-600 text-neutral-950 rounded-xl px-6 cursor-pointer"
-                            >
-                                Buscar
-                            </Button>
-                        </div>
-
-                        {contacts.length === 0 ? (
-                            <p className="text-neutral-400">Nenhum contato encontrado.</p>
-                        ) : (
-                            contacts.map(contact => (
-                                <div 
-                                    key={contact.id} 
-                                    onClick={() => loadChatHistory(contact)}
-                                    className="flex items-center gap-4 p-4 bg-neutral-900 border border-neutral-800 rounded-xl cursor-pointer hover:bg-neutral-800 transition-colors text-neutral-50"
-                                >
-                                    <div className="w-12 h-12 bg-primary-500 rounded-full flex items-center justify-center font-bold text-xl text-neutral-950">
-                                        {contact.name.charAt(0)}
-                                    </div>
-                                    <div className="flex-1">
-                                        <h3 className="font-semibold">{contact.name}</h3>
-                                        <p className="text-sm text-neutral-400">{contact.email}</p>
-                                    </div>
-                                    <MessageSquare className="w-5 h-5 text-neutral-400" />
-                                </div>
-                            ))
-                        )}
-                    </div>
+                    <ContactsView 
+                        contacts={contacts} 
+                        contactSearchQuery={contactSearchQuery} 
+                        setContactSearchQuery={setContactSearchQuery} 
+                        fetchContacts={fetchContacts} 
+                        loadChatHistory={loadChatHistory} 
+                    />
                 )}
 
-                {/* View de Chat com Contato Específico (Peer-to-Peer) */}
                 {currentView === 'peer-chat' && selectedContact && (
-                    <div className="flex flex-1 flex-col h-full overflow-hidden">
-                        <div className="p-4 border-b border-neutral-800 bg-neutral-900 flex items-center gap-4">
-                            <div className="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center font-bold text-neutral-950">
-                                {selectedContact.name.charAt(0)}
-                            </div>
-                            <h2 className="text-lg font-semibold text-neutral-50">{selectedContact.name}</h2>
-                        </div>
-                        
-                        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-                            {peerMessages.map((msg, index) => {
-                                const isMe = msg.senderId === currentUser.id;
-                                return (
-                                    <div key={msg.id || index} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                        <div className={`max-w-[75%] p-4 rounded-xl ${isMe ? 'bg-primary-500 text-neutral-50 rounded-br-none' : 'bg-neutral-800 text-neutral-200 border border-neutral-800 rounded-bl-none whitespace-pre-wrap'}`}>
-                                            {msg.content || msg.text}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                            {/* Âncora invisível para a rolagem automática do chat P2P */}
-                            <div ref={peerMessagesEndRef} />
-                        </div>
-
-                        <div className="p-4 bg-neutral-900 border-t border-neutral-800">
-                            <div className="max-w-4xl mx-auto relative flex items-center">
-                                <Input
-                                    value={peerPrompt}
-                                    onChange={(e) => setPeerPrompt(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSendPeer()}
-                                    placeholder={`Mensagem para ${selectedContact.name}...`}
-                                    className="w-full pr-12 py-6 border-neutral-700 bg-neutral-800 text-neutral-50 rounded-xl focus-visible:ring-1 focus-visible:ring-primary-500"
-                                />
-                                <Button onClick={handleSendPeer} size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 bg-primary-500 hover:bg-primary-600 text-neutral-950 rounded-lg cursor-pointer">
-                                    <Send className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
+                    <PeerChatView 
+                        selectedContact={selectedContact} 
+                        peerMessages={peerMessages} 
+                        currentUser={currentUser} 
+                        peerPrompt={peerPrompt} 
+                        setPeerPrompt={setPeerPrompt} 
+                        handleSendPeer={handleSendPeer} 
+                        peerMessagesEndRef={peerMessagesEndRef} 
+                    />
                 )}
             </div>
         </SidebarProvider>
